@@ -1,16 +1,22 @@
 {
   "name": "http-live-streaming",
-  "module": "index.ts",
-  "type": "module",
   "private": true,
+  "description": "Express HLS API + Next dashboard",
+  "workspaces": ["client", "server"],
   "scripts": {
-    "dev": "bun --hot ./index.ts",
-    "start": "bun ./index.ts",
-    "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "dev": "concurrently -n server,client -c cyan,magenta \"cd server && bun run dev\" \"cd client && bun run dev\"",
+    "dev:server": "cd server && bun run dev",
+    "dev:client": "cd client && bun run dev",
+    "build": "cd client && bun run build",
+    "start": "cd client && bun run start",
+    "lint": "cd client && bun run lint",
+    "typecheck": "cd server && bun run typecheck && cd ../client && bunx tsc --noEmit",
+    "clean": "rm -rf client/.next server/uploads server/hls-output"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "typescript": "^5"
+    "concurrently": "^9.2.1"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
   }
 }
