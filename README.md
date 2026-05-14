@@ -37,6 +37,7 @@ bun install
 | `bun run typecheck` | Typecheck `server` and `client` |
 | `bun run lint` | ESLint in `client` |
 | `bun run clean` | Remove `.next`, `server/uploads`, `server/hls-output` |
+| **Docker Compose** | `docker compose up --build` from repo root — see `compose.yaml` (API on host port `API_PORT` or `3001`, named volumes for `uploads` / `hls-output`) |
 
 ## Development
 
@@ -45,6 +46,16 @@ bun run dev
 ```
 
 Open the Next app URL (printed by `next dev`, usually `http://localhost:3000`). Watch the **`server`** terminal for **morgan** lines plus **`[hls job=<uuid>] …`** milestones (upload → probe → ffmpeg → done). Set `NEXT_PUBLIC_API_BASE` in `client/.env.local` if the API URL changes.
+
+### Docker Compose (API container)
+
+From the repo root:
+
+```bash
+docker compose up --build
+```
+
+Optional: add a **`.env`** next to `compose.yaml` with `API_PORT=3001`, `CLIENT_ORIGINS=...`. Media is stored in named Docker volumes (`hls-uploads`, `hls-output`). Shortcuts: **`bun run docker:up`** / **`bun run docker:down`** / **`bun run docker:logs`**.
 
 ## Notes
 

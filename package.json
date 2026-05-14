@@ -11,7 +11,10 @@
     "start": "cd client && bun run start",
     "lint": "cd client && bun run lint",
     "typecheck": "cd server && bun run typecheck && cd ../client && bunx tsc --noEmit",
-    "clean": "rm -rf client/.next server/uploads server/hls-output"
+    "clean": "rm -rf client/.next server/uploads server/hls-output",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f api"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

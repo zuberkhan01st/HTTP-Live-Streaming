@@ -1,0 +1,13 @@
+# Keep `docker build -f server/.Dockerfile .` fast and small
+
+.git
+**/.git
+**/node_modules
+client
+**/.next
+**/uploads
+**/hls-output
+.env
+.env.*
+!.env.example
+*.md
