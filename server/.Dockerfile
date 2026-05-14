@@ -4,7 +4,7 @@
 #   docker build -f server/.Dockerfile -t hls-server .
 #
 
-FROM oven/bun:1
+FROM oven/bun:1-slim
 
 # ffmpeg bundles ffprobe on Debian-derived images — no separate ffprobe package
 RUN apt-get update \
