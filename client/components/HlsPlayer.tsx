@@ -189,6 +189,19 @@ export function HlsPlayer({ src, className, renditionHints, variantSources }: Pr
       return `${ABR_SUMMARY[abrMode]} · ${ceilLabel}${est}`;
     }
 
+    function applyCrossOriginFromManifestUrl(mediaUrl: string) {
+      video.removeAttribute("crossOrigin");
+      try {
+        if (!/^https?:\/\//i.test(mediaUrl)) return;
+        const o = new URL(mediaUrl, window.location.href);
+        if (o.origin !== window.location.origin) {
+          video.crossOrigin = "anonymous";
+        }
+      } catch {
+        /* ignore malformed URL */
+      }
+    }
+
     function updateStatsLabel(hls: Hls | null) {
       const v = ref.current;
       if (!v) return;
@@ -280,6 +293,7 @@ export function HlsPlayer({ src, className, renditionHints, variantSources }: Pr
         pinned === "auto" || !variantSources?.length
           ? src
           : (variantSources.find((s) => s.idx === pinned)?.url ?? src);
+      applyCrossOriginFromManifestUrl(url);
       video.src = url;
       video.addEventListener("timeupdate", onTick);
       video.addEventListener("progress", onTick);
@@ -288,6 +302,7 @@ export function HlsPlayer({ src, className, renditionHints, variantSources }: Pr
       return () => {
         video.removeEventListener("timeupdate", onTick);
         video.removeEventListener("progress", onTick);
+        video.removeAttribute("crossOrigin");
         video.removeAttribute("src");
         video.load();
       };
@@ -302,6 +317,8 @@ export function HlsPlayer({ src, className, renditionHints, variantSources }: Pr
       enableWorker: true,
       ...mergeHlsBase(abrMode),
     };
+
+    applyCrossOriginFromManifestUrl(src);
 
     const hls = new Hls(cfg);
     hlsRef.current = hls;
@@ -351,6 +368,7 @@ export function HlsPlayer({ src, className, renditionHints, variantSources }: Pr
       video.removeEventListener("progress", onTick);
       hls.destroy();
       hlsRef.current = null;
+      video.removeAttribute("crossOrigin");
       video.removeAttribute("src");
       video.load();
     };

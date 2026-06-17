@@ -1,0 +1,23 @@
+[
+  {
+    "origin": ["http://localhost:3000", "http://127.0.0.1:3000"],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Content-Encoding",
+      "Content-Disposition",
+      "Range",
+      "Accept-Ranges",
+      "Content-Range",
+      "Transfer-Encoding",
+      "x-goog-hash",
+      "x-goog-meta-firebasestorage",
+      "x-goog-generation",
+      "x-goog-metageneration",
+      "x-goog-stored-content-encoding",
+      "x-goog-stored-content-length"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

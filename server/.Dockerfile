@@ -20,7 +20,7 @@ RUN bun install --production --ignore-scripts
 
 COPY server/src ./src
 
-RUN mkdir -p uploads hls-output
+RUN mkdir -p uploads hls-output .data
 
 ENV NODE_ENV=production
 ENV PORT=3001

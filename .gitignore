@@ -28,6 +28,7 @@ coverage
 # Local runtime data (Bun API)
 server/uploads
 server/hls-output
+server/.data
 
 # IDE / OS
 .idea

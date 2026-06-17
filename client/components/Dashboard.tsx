@@ -2,6 +2,7 @@
 
 import { HlsPlayer } from "@/components/HlsPlayer";
 import { getApiBase } from "@/lib/api-base";
+import { firebaseStorageSiblingUriFromMaster } from "@/lib/firebase-storage-media-url";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type RenditionMeta = {
@@ -16,6 +17,8 @@ type Job = {
   sourceName: string;
   createdAt: string;
   manifestPath: string;
+  /** When set, playlists and segments bypass the Express `/hls` proxy and load straight from HTTPS (GCS). */
+  manifestPublicUrl?: string | null;
   ladder: "abr" | "single";
   renditions: RenditionMeta[];
 };
@@ -25,7 +28,10 @@ type UploadResult = {
   id: string;
   sourceName: string;
   manifestPath: string;
+  /** Primary playback URL (public CDN if configured, otherwise API `/hls/...` proxy). */
   manifestUrl: string;
+  manifestPublicUrl?: string | null;
+  manifestProxyUrl?: string;
   ladder: "abr" | "single";
   renditions: RenditionMeta[];
 };
@@ -70,6 +76,34 @@ function formatWhen(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+/** Absolute manifest URL — direct HTTPS when API sets manifestPublicUrl. */
+function effectiveManifestPlaybackUrl(
+  apiBase: string,
+  job: Pick<Job, "manifestPath" | "manifestPublicUrl">,
+): string {
+  const pub = job.manifestPublicUrl?.trim();
+  if (pub) return pub;
+  return `${apiBase}${job.manifestPath}`;
+}
+
+/** Parent folder URL so variant playlists like stream_1.m3u8 resolve beside master. */
+function derivePlaylistFolderUrl(manifestAbsoluteUrl: string): string {
+  try {
+    const u = new URL(manifestAbsoluteUrl);
+    const slash = u.pathname.lastIndexOf("/");
+    u.pathname = u.pathname.slice(0, slash + 1);
+    return u.href.endsWith("/") ? u.href : `${u.href}/`;
+  } catch {
+    const i = manifestAbsoluteUrl.lastIndexOf("/");
+    return i > 8 ? `${manifestAbsoluteUrl.slice(0, i + 1)}` : manifestAbsoluteUrl;
+  }
+}
+
+/** Playlists / segments fetched straight from HTTPS storage (browser bypasses `{api}/hls/…`). */
+function playbackIsDirectGcs(job: Pick<Job, "manifestPublicUrl">): boolean {
+  return Boolean(job.manifestPublicUrl?.trim());
 }
 
 export function Dashboard() {
@@ -117,17 +151,24 @@ export function Dashboard() {
     ? jobs.find((j) => j.id === effectivePlaybackId) ?? null
     : null;
 
-  const playUrl = selected ? `${api}${selected.manifestPath}` : "";
+  const playUrl = selected ? effectiveManifestPlaybackUrl(api, selected) : "";
   const renditionHints = selected?.renditions.map((r) => r.label) ?? [];
 
   const safariVariantSources = useMemo(() => {
     if (!selected || selected.ladder !== "abr") return undefined;
     if (!selected.manifestPath.endsWith("master.m3u8")) return undefined;
-    return selected.renditions.map((r, i) => ({
-      idx: i,
-      label: `${r.label} (~${r.height}px · ~${r.videoBitrateKbps} kb/s)`,
-      url: `${api}/hls/${selected.id}/stream_${i}.m3u8`,
-    }));
+    const masterAbs = effectiveManifestPlaybackUrl(api, selected);
+    const folderUrl = derivePlaylistFolderUrl(masterAbs);
+    return selected.renditions.map((r, i) => {
+      const leaf = `stream_${i}.m3u8`;
+      const url =
+        firebaseStorageSiblingUriFromMaster(masterAbs, leaf) ?? `${folderUrl}${leaf}`;
+      return {
+        idx: i,
+        label: `${r.label} (~${r.height}px · ~${r.videoBitrateKbps} kb/s)`,
+        url,
+      };
+    });
   }, [selected, api]);
 
   async function onSubmitFile(file: File) {
@@ -182,9 +223,16 @@ export function Dashboard() {
         </h1>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-slate-400">
           Upload a mezzanine file and the packaging service builds your ladder (1080p / 720p /
-          480p) with a master playlist, or a fast single 720p rung. Select a packaged job below to
-          stream HLS straight from this API URL:{" "}
+          480p) with a master playlist, or a fast single 720p rung. With Firebase packaging, playback
+          usually targets{' '}
+          <strong className="text-emerald-200/90">HTTPS on Google Cloud Storage</strong> so playlists
+          and TS segments bypass the API host below—only ingest and job lists call{' '}
           <code className="rounded-md bg-black/35 px-1.5 py-0.5 text-xs text-sky-200">{api}</code>.
+          Override with{' '}
+          <code className="rounded-md bg-black/35 px-1.5 py-0.5 text-[11px] text-violet-200">
+            HLS_PROXY_PLAYBACK_ONLY=1
+          </code>{' '}
+          to stream everything via <strong className="text-slate-200">GET /hls</strong> instead.
         </p>
       </header>
 
@@ -257,8 +305,9 @@ export function Dashboard() {
             <div>
               <h2 className="text-lg font-medium text-white">Packaged titles</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Filesystem library under{" "}
+                Disk mode writes under{" "}
                 <span className="font-mono text-xs text-slate-300">server/hls-output</span>
+                · Firebase mode lists packaged jobs from the API registry JSON
               </p>
             </div>
             <button
@@ -329,8 +378,7 @@ export function Dashboard() {
                     ))}
                   </div>
                   <p className="mt-2 break-all font-mono text-[10px] text-sky-400/85">
-                    {api}
-                    {j.manifestPath}
+                    {effectiveManifestPlaybackUrl(api, j)}
                   </p>
                 </button>
               </li>
@@ -344,9 +392,12 @@ export function Dashboard() {
           <div className="min-w-0 flex-1 space-y-2">
             <h2 className="text-lg font-medium text-white">Playback</h2>
             <p className="text-sm text-slate-400">
-              Choose exactly which packaged job feeds the player. Streams your manifest URL from{" "}
-              <code className="text-[11px] text-sky-300/90">{api}</code> — each selection remounts
-              the pipeline so playlists don&apos;t bleed together.
+              Firebase/GCS deployments default <code className="text-[11px] text-emerald-200/90">manifestPublicUrl</code> on{" "}
+              <code className="text-[11px] text-slate-300">storage.googleapis.com</code> — the embedded
+              player hits Google Storage directly. If jobs only expose{" "}
+              <code className="text-[11px] text-sky-300/90">{api}/hls/…</code>, set server env{' '}
+              <code className="text-[11px] text-violet-200/90">HLS_PROXY_PLAYBACK_ONLY=1</code> explicitly
+              (private buckets).
             </p>
           </div>
         </div>
@@ -375,14 +426,27 @@ export function Dashboard() {
 
         {!selected ? (
           <p className="mt-6 text-sm text-slate-400">
-            Select a packaged asset above — the manifest and TS segments stream from your Express
-            host.
+            Select a packaged asset above — playlists and TS segments load from the manifest URL’s
+            origin (GCS/CDN or this API proxy).
           </p>
         ) : (
           <div className="mt-6">
             <div className="mb-4 rounded-xl border border-slate-700/60 bg-black/30 px-3 py-2 text-sm text-slate-300">
-              <span className="font-medium text-white">{selected.sourceName}</span>
-              <span className="ml-2 font-mono text-[11px] text-sky-400/85">{playUrl}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium text-white">{selected.sourceName}</span>
+                {playbackIsDirectGcs(selected) ? (
+                  <span className="shrink-0 rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-100 ring-1 ring-emerald-500/35">
+                    Direct · GCS HTTPS
+                  </span>
+                ) : (
+                  <span className="shrink-0 rounded-md bg-violet-500/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-100 ring-1 ring-violet-400/35">
+                    API proxy · GET /hls
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 break-all font-mono text-[11px] leading-snug text-sky-400/90">
+                {playUrl}
+              </p>
             </div>
             <HlsPlayer
               key={selected.id}

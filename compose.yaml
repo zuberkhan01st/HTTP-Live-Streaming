@@ -4,8 +4,8 @@
 #   docker compose up --build       # foreground
 #   docker compose up --build -d    # detached
 #
-# Compose reads `.env` in this directory for ${VAR} substitution (optional).
-# Point a dev Next app at http://localhost:3001 via NEXT_PUBLIC_API_BASE.
+# Put Firebase / GCS settings in `.env` next to this file (Compose interpolates it).
+# For multiline FIREBASE_PRIVATE_KEY, keep it in `.env` (recommended) rather than YAML.
 #
 
 services:
@@ -17,16 +17,36 @@ services:
     container_name: hls-api
     restart: unless-stopped
     ports:
-      # Host binding (host:container) — tune API_PORT in `.env` if 3001 is taken
       - "${API_PORT:-3001}:3001"
     environment:
       NODE_ENV: production
       PORT: "3001"
-      # Matches server defaults; override with CLIENT_ORIGINS in `.env`
       CLIENT_ORIGINS: ${CLIENT_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      # Persist job list JSON when using Firebase mode (mounted volume below).
+      JOB_REGISTRY_PATH: /data/jobs-registry.json
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:-}
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME:-}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      STORAGE_HLS_PREFIX: ${STORAGE_HLS_PREFIX:-hls-packaging}
+      HLS_PUBLIC_BASE_URL: ${HLS_PUBLIC_BASE_URL:-}
+      HLS_PUBLIC_FROM_BUCKET: ${HLS_PUBLIC_FROM_BUCKET:-}
+      HLS_PROXY_PLAYBACK_ONLY: ${HLS_PROXY_PLAYBACK_ONLY:-}
+      HLS_PUBLIC_URL_STYLE: ${HLS_PUBLIC_URL_STYLE:-}
+      HLS_FIREBASE_PLAYBACK_TOKEN: ${HLS_FIREBASE_PLAYBACK_TOKEN:-}
+      SERVER_DATA_ROOT: ${SERVER_DATA_ROOT:-/app/.data}
+      GCS_UPLOAD_CONCURRENCY: ${GCS_UPLOAD_CONCURRENCY:-}
+      HLS_LOG_DELIVERY: ${HLS_LOG_DELIVERY:-}
+      GCP_SERVICE_ACCOUNT_JSON_B64: ${GCP_SERVICE_ACCOUNT_JSON_B64:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
     volumes:
-      - hls-uploads:/app/uploads
-      - hls-output:/app/hls-output
+      - hls-job-registry:/data
+      # Fallback when FIREBASE_STORAGE_BUCKET is unset — server uses disk under /app
+      - hls-disk-output:/app/hls-output
+      - hls-disk-uploads:/app/uploads
+
     healthcheck:
       test:
         [
@@ -41,5 +61,6 @@ services:
       start_period: 15s
 
 volumes:
-  hls-uploads:
-  hls-output:
+  hls-job-registry:
+  hls-disk-output:
+  hls-disk-uploads:

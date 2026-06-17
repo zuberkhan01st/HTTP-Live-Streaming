@@ -30,8 +30,8 @@ async function fileExists(p: string): Promise<boolean> {
 
 /**
  * FFmpeg's variant HLS muxer often writes media playlists with bare `segmentNNN.ts`
- * while files live under `v0/`, `v1/`, `v2/`. hls.js resolves URLs from the job root, so
- * we rewrite lines to `v{stream}/segmentNNN.ts` when that file exists.
+ * while files live under `v0/`, `v1/`, `v2/`. Resolving parent base from the variant
+ * playlist URL fixes resolution for both API-proxied `/hls/…` and absolute public URLs.
  */
 export async function patchNestedAbrPlaylists(
   outputDir: string,
